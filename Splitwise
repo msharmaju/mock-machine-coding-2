@@ -1,0 +1,286 @@
+#include  <bits/stdc++.h>
+#include <boost/algorithm/string.hpp>
+using namespace std;
+
+#define userId string
+#define transactionType string
+
+
+class user {
+public:
+    user(userId id, string name, string email, long mobileNo) : 
+        _userId(id), _name(name), _email(email), _mobileNo(mobileNo) {}
+        
+    void updateUserGetsBalance(userId id, float amount);
+    void updateUserOwesBalance(userId id, float amount);
+    userId getId() { return _userId;}
+    
+    void showBalanceSheet(unordered_map<userId, bool> &visited);
+    
+private:
+    userId _userId;
+    string _name;
+    string _email;
+    long _mobileNo;
+    
+    unordered_map<userId, float> _gets;
+    unordered_map<userId, float> _owes;
+};
+
+void user::updateUserGetsBalance(userId id, float amount) {
+    _gets[id] = _gets[id] + amount;
+}
+
+void user::updateUserOwesBalance(userId id, float amount) {
+    _owes[id] = _owes[id] + amount;
+}
+
+void user::showBalanceSheet(unordered_map<userId, bool> &visited) {
+    
+    for (auto it = _owes.begin(); it != _owes.end(); it++) {
+        if (!visited[it->first + _userId]) {
+            visited[it->first] = true;
+            float owe = it->second;
+            float get = _gets[it->first];
+            if (owe > get) {
+                std::cout<<_userId<<" owes "<<it->first<<": "<<it->second<<endl;
+            } else if (owe < get) {
+                std::cout<<it->first<<" owes "<<_userId<<": "<<it->second<<endl;
+            }
+            visited[it->first + _userId] = true;
+            visited[_userId + it->first] = true;
+        }
+    }
+    
+    for (auto it = _gets.begin(); it != _gets.end(); it++) {
+        if (!visited[it->first + _userId]) {
+            visited[it->first + _userId] = true;
+            visited[_userId + it->first] = true;
+            std::cout<<it->first<<" owes "<<_userId<<": "<<it->second<<endl;
+        }
+        
+    }
+}
+class transaction {
+public:
+    transaction(transactionType type, user* spender, float amount) :
+        _type(), _spender(spender), _amount(amount) {}
+    //void addSpender(user *u);
+    user* getSpender() { return _spender;}
+    void addUsers(vector<user*> &users);
+    vector<user*>& getUsers() { return _users;}
+    void addAmount(int amount);
+    int getAmount() { return _amount;}
+    void setTransactionType(transactionType type);
+    float round1(float x);
+    
+    virtual void updateBalance() = 0;
+    
+private:
+
+    transactionType _type;
+    float _amount;
+    user* _spender;
+    vector<user*> _users;
+};
+
+/*void transaction::addSpender(user* u) {
+    _spender = u;
+}*/
+
+void transaction::addUsers(vector<user*> &users) {
+    _users = users;
+}
+
+float transaction::round1(float x) {
+    float value = (int)(x * 100 + .5);
+    return (float)value / 100;
+}
+
+class equalTransaction : public transaction {
+public:
+    equalTransaction(transactionType type, user* spender, int amount) : transaction(type, spender, amount) {}
+    void updateBalance();
+};
+
+void equalTransaction::updateBalance() {
+    int n = getUsers().size();
+    cout<<n<<endl;
+    float f = getAmount()/n;
+    //cout<<f<<endl;
+    float x = round1(f);
+    cout<<x<<endl;
+    for (user* u : getUsers()) {
+        if (u != getSpender()) {
+            cout<<u->getId()<<" ";
+            u->updateUserOwesBalance(getSpender()->getId(), x);
+            getSpender()->updateUserGetsBalance(u->getId(), x);
+        }
+    }
+    cout<<endl;
+}
+
+class exactTransaction : public transaction {
+public:
+    exactTransaction(transactionType type, user* spender, int amount, vector<float> &amounts) : transaction(type, spender, amount), 
+        _amounts(amounts) {}
+    void updateBalance();
+    
+private:
+    vector<float> _amounts;
+};
+
+void exactTransaction::updateBalance() {
+    float sum = 0;
+    for (float i : _amounts) {
+        sum += i;
+    }
+    cout<<"sum: "<< sum<< " amount:"<< getAmount()<<endl;
+    if (sum != getAmount()) {
+        std::cout << "exact amounts does not add upto the amount" << std::endl;
+        return;
+    }
+    if (_amounts.size() != getUsers().size()) {
+        cout<<"Number user does not match with the specified value\n";
+    }
+    auto it = _amounts.begin();
+    auto userIter = getUsers().begin();
+    for (; it != _amounts.end(); it++, userIter++) {
+        if (*userIter != getSpender()) {
+            (*userIter)->updateUserOwesBalance(getSpender()->getId(), *it);
+            getSpender()->updateUserGetsBalance((*userIter)->getId(), *it);
+        }
+    }
+}
+
+class percentTransaction : public transaction {
+public:
+    percentTransaction(transactionType type, user* spender, int amount, vector<int> &percents) : 
+        transaction(type, spender, amount), _percentages(percents) {}
+    void updateBalance();
+private:
+    vector<int> _percentages;
+};
+
+void percentTransaction::updateBalance() {
+    int sum = 0;
+    for (int i : _percentages) {
+        sum += i;
+    }
+    if (sum != 100) {
+        cout<<"percents specified does not add to 100\n";
+    }
+    auto it = _percentages.begin();
+    auto userIter = getUsers().begin();
+    for (; it != _percentages.end(); it++, userIter++) {
+        if (*userIter != getSpender()) {
+            float x = round1((getAmount() * (*it))/100);
+            (*userIter)->updateUserOwesBalance(getSpender()->getId(), x);
+            getSpender()->updateUserGetsBalance((*userIter)->getId(), x);
+        }
+    }
+}
+
+class splitwise {
+public:
+    void addUser(userId id, string name, string email, long mobileNo);
+    user* getUser(userId id);
+    
+    void show();
+    void show(userId id, unordered_map<userId, bool> &visited);
+private:
+    unordered_map<userId, user*> _users;
+};
+
+void splitwise::addUser(userId id, string name, string email, long mobileNo) {
+    user *u = new user(id, name, email, mobileNo);
+    _users[id] = u;
+}
+user* splitwise::getUser(userId id) {
+    return _users[id];
+}
+
+void splitwise::show() {
+    cout<<" Showing all user balances:\n";
+    unordered_map<userId, bool> visited;
+    for (auto it = _users.begin(); it != _users.end(); it++) {
+        show(it->first, visited);
+    }
+}
+
+void splitwise::show(userId id, unordered_map<userId, bool> &visited) {
+    user* u = _users[id];
+    u->showBalanceSheet(visited);
+}
+
+constexpr unsigned int str2int(const char* str, int h = 0)
+{
+    return !str[h] ? 5381 : (str2int(str, h+1) * 33) ^ str[h];
+}
+
+int main() {
+    
+    splitwise *sw = new splitwise();
+    sw->addUser("u1", "Mukul", "msharmaju@gmail.com", 7061457653);
+    sw->addUser("u2", "Vipul", "msharmaju@gmail.com", 7061457653);
+    sw->addUser("u3", "Rahul", "msharmaju@gmail.com", 7061457653);
+    sw->addUser("u4", "Saurav", "msharmaju@gmail.com", 7061457653);
+    
+	string input;
+	bool flag = false;
+	while (getline(cin, input)) {
+	    vector<string> v;
+	    boost::split(v, input, boost::is_any_of(" "));
+	    if (v[0] == "SHOW") {
+	       if (!flag) {
+	           cout<<"No balances\n";
+	           continue;
+	       }
+	       if (v.size() == 2) {
+	           cout<<"Showing balance of user: "<< v[1]<<endl;
+	           unordered_map<userId, bool> visited;
+	           sw->show(v[1], visited);
+	       } else if (v.size() == 1) {
+	           sw->show();
+	       }
+	   } else if (v[0] == "EXPENSE") {
+	       flag = true;
+	       user *spender = sw->getUser(v[1]);
+	       int amount = std::stof(v[2]);
+	       int noOfUser = std::stoi(v[3]);
+	       vector<user*> users;
+	       for (int i = 0; i < noOfUser; i++) {
+	           user *u = sw->getUser(v[4+i]);
+	           users.push_back(u);
+	       }
+	       string type = v[4 + noOfUser];
+	       if (type == "EQUAL") {
+	           equalTransaction *equalT = new equalTransaction("EQUAL", spender, amount);
+	           equalT->addUsers(users);
+	           equalT->updateBalance();
+	       } else if (type == "EXACT") {
+	           vector<float> amounts;
+	           for (int i = 5 + noOfUser; i < v.size(); i++) {
+	               float f = std::stof(v[i]);
+	               amounts.push_back(f);
+	           }
+	           exactTransaction *exactT = new exactTransaction("EXACT", spender, amount, amounts);
+	           exactT->addUsers(users);
+	           exactT->updateBalance();
+	       } else if (type == "PERCENT") {
+	           vector<int> percents;
+	           for (int i = 5 + noOfUser; i < v.size(); i++) {
+	               percents.push_back(std::stof(v[i]));
+	           }
+	           percentTransaction *percentT = new percentTransaction("PERCENT", spender, amount, percents);
+	           percentT->addUsers(users);
+	           percentT->updateBalance();
+	           
+	       }
+	       
+	   }
+	    
+	}
+	
+	return 0;
+}
